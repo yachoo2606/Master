@@ -1,0 +1,4 @@
+to generate visualization of network in docker use in directory which contains docker-compose.yml file
+```shell
+docker run --rm -it --name dcv -v .:/input pmsipilot/docker-compose-viz render -m image docker-compose.yaml
+```
