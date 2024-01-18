@@ -1,2 +1,8 @@
 docker build Producer -t producer --no-cache
-docker run --rm --network=applications_masterNetwork -e PEER_1_URL=http://172.20.0.2:9001/eureka/ -e PRODUCER_ID=1 --name=PRODUCER_1 producer
+
+docker run --rm --network=masterNetwork \
+-e PEER_1_URL=http://172.20.0.2:9001/eureka/ \
+-e PRODUCER_ID=1 -e LOGSTASH_DESTINATION_ONE=172.20.0.12:5000 \
+-e LOGSTASH_DESTINATION_TWO=172.20.0.13:5000 \
+-e LOGSTASH_DESTINATION_THREE=172.20.0.14:5000 \
+--name=PRODUCER_1 producer
