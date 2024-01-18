@@ -11,7 +11,9 @@ services:
       - SPRING_PROFILES_ACTIVE=peer-1
       - PEER_2_URL=http://172.20.0.3:9002/eureka/
       - PEER_3_URL=http://172.20.0.4:9003/eureka/
-      - LOGSTASH_DESTINATION=172.20.0.12:5000,172.20.0.13:5000,172.20.0.14:5000
+      - LOGSTASH_DESTINATION_ONE=172.20.0.13:5000
+      - LOGSTASH_DESTINATION_TWO=172.20.0.13:5000
+      - LOGSTASH_DESTINATION_THREE=172.20.0.14:5000
     networks:
       masterNetwork:
         ipv4_address: 172.20.0.2
@@ -26,7 +28,9 @@ services:
       - SPRING_PROFILES_ACTIVE=peer-2
       - PEER_1_URL=http://172.20.0.2:9001/eureka/
       - PEER_3_URL=http://172.20.0.4:9003/eureka/
-      - LOGSTASH_DESTINATION=172.20.0.12:5000,172.20.0.13:5000,172.20.0.14:5000
+      - LOGSTASH_DESTINATION_ONE=172.20.0.13:5000
+      - LOGSTASH_DESTINATION_TWO=172.20.0.13:5000
+      - LOGSTASH_DESTINATION_THREE=172.20.0.14:5000
     networks:
       masterNetwork:
         ipv4_address: 172.20.0.3
@@ -41,7 +45,9 @@ services:
       - SPRING_PROFILES_ACTIVE=peer-3
       - PEER_1_URL=http://172.20.0.2:9001/eureka/
       - PEER_2_URL=http://172.20.0.3:9002/eureka/
-      - LOGSTASH_DESTINATION=172.20.0.12:5000,172.20.0.13:5000,172.20.0.14:5000
+      - LOGSTASH_DESTINATION_ONE=172.20.0.13:5000
+      - LOGSTASH_DESTINATION_TWO=172.20.0.13:5000
+      - LOGSTASH_DESTINATION_THREE=172.20.0.14:5000
     networks:
       masterNetwork:
         ipv4_address: 172.20.0.4
