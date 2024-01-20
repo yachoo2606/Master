@@ -1,16 +1,17 @@
 #!/bin/bash
 
-# Check if an argument is provided
-if [ $# -eq 0 ]; then
-    echo "Usage: $0 <number of iterations>"
+# Check if the necessary arguments are provided
+if [ $# -ne 2 ]; then
+    echo "Usage: $0 <first producer id> <number of producers>"
     exit 1
 fi
 
-# Number of times to run the command
-num_iterations=$1
+# First producer ID and number of producers to run
+first_producer_id=$1
+num_producers=$2
 
 # Loop and run the Docker command
-for (( i=1; i<=num_iterations; i++ )); do
+for (( i=first_producer_id; i<first_producer_id+num_producers; i++ )); do
 
     docker run --rm -d --network=masterNetwork \
     -e PEER_1_URL=http://172.20.0.2:9001/eureka/ \

@@ -1,8 +1,425 @@
 #docker compose down && docker compose build --no-cache && docker compose up --force-recreate -d
-version: '3'
-services:    
+version: '3.8'
+
+x-common-settings: &elasticsearchImage
+  image: docker.elastic.co/elasticsearch/elasticsearch:${STACK_VERSION}
+
+volumes:
+  certs:
+    driver: local
+  esdata01:
+    driver: local
+  esdata02:
+    driver: local
+  esdata03:
+    driver: local
+  kibanadata:
+    driver: local
+  metricbeatdata01:
+    driver: local
+  logstashdata01:
+    driver: local
+  logstashdata02:
+    driver: local
+  logstashdata03:
+    driver: local
+
+networks:
+  masterNetwork:
+    driver: bridge
+    name: masterNetwork
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
+
+services:  
+  setup:
+    container_name: setup
+    <<: *elasticsearchImage
+    volumes:
+      - certs:/usr/share/elasticsearch/config/certs
+    user: "0"
+    networks:
+      masterNetwork:
+        ipv4_address: 172.20.0.5
+    command: >
+      bash -c '
+        if [ x${ELASTIC_PASSWORD} == x ]; then
+          echo "Set the ELASTIC_PASSWORD environment variable in the .env file";
+          exit 1;
+        elif [ x${KIBANA_PASSWORD} == x ]; then
+          echo "Set the KIBANA_PASSWORD environment variable in the .env file";
+          exit 1;
+        fi;
+        if [ ! -f config/certs/ca.zip ]; then
+          echo "Creating CA";
+          bin/elasticsearch-certutil ca --silent --pem -out config/certs/ca.zip;
+          unzip config/certs/ca.zip -d config/certs;
+        fi;
+        if [ ! -f config/certs/certs.zip ]; then
+          echo "Creating certs";
+          echo -ne \
+          "instances:\n"\
+          "  - name: es01\n"\
+          "    dns:\n"\
+          "      - es01\n"\
+          "      - localhost\n"\
+          "    ip:\n"\
+          "      - 127.0.0.1\n"\
+          "  - name: es02\n"\
+          "    dns:\n"\
+          "      - es02\n"\
+          "      - localhost\n"\
+          "    ip:\n"\
+          "      - 127.0.0.1\n"\
+          "  - name: es03\n"\
+          "    dns:\n"\
+          "      - es03\n"\
+          "      - localhost\n"\
+          "    ip:\n"\
+          "      - 127.0.0.1\n"\
+          "  - name: kibana\n"\
+          "    dns:\n"\
+          "      - kibana\n"\
+          "      - localhost\n"\
+          "    ip:\n"\
+          "      - 127.0.0.1\n"\
+          > config/certs/instances.yml;
+          bin/elasticsearch-certutil cert --silent --pem -out config/certs/certs.zip --in config/certs/instances.yml --ca-cert config/certs/ca/ca.crt --ca-key config/certs/ca/ca.key;
+          unzip config/certs/certs.zip -d config/certs;
+        fi;
+        echo "Setting file permissions"
+        chown -R root:root config/certs;
+        find . -type d -exec chmod 750 \{\} \;;
+        find . -type f -exec chmod 640 \{\} \;;
+        echo "Waiting for Elasticsearch availability";
+        until curl -s --cacert config/certs/ca/ca.crt https://es01:9200 | grep -q "missing authentication credentials"; do sleep 30; done;
+        echo "Setting kibana_system password";
+        until curl -s -X POST --cacert config/certs/ca/ca.crt -u "elastic:${ELASTIC_PASSWORD}" -H "Content-Type: application/json" https://es01:9200/_security/user/kibana_system/_password -d "{\"password\":\"${KIBANA_PASSWORD}\"}" | grep -q "^{}"; do sleep 10; done;
+        echo "All done!";
+      '
+    healthcheck:
+      test: ["CMD-SHELL", "[ -f config/certs/es01/es01.crt ]"]
+      interval: 1s
+      timeout: 5s
+      retries: 120
+
+  es01:
+    container_name: elasticsearch01
+    depends_on:
+      setup:
+        condition: service_healthy
+    <<: *elasticsearchImage
+    volumes:
+      - certs:/usr/share/elasticsearch/config/certs
+      - esdata01:/usr/share/elasticsearch/data
+    ports:
+      - ${ES_PORT}:9200
+    networks:
+      masterNetwork:
+        ipv4_address: 172.20.0.6
+    environment:
+      - node.name=es01
+      - cluster.name=${CLUSTER_NAME}
+      - cluster.initial_master_nodes=es01,es02,es03
+      - discovery.seed_hosts=es02,es03
+      - ELASTIC_PASSWORD=${ELASTIC_PASSWORD}
+      - bootstrap.memory_lock=true
+      - xpack.security.enabled=true
+      - xpack.security.http.ssl.enabled=true
+      - xpack.security.http.ssl.key=certs/es01/es01.key
+      - xpack.security.http.ssl.certificate=certs/es01/es01.crt
+      - xpack.security.http.ssl.certificate_authorities=certs/ca/ca.crt
+      - xpack.security.transport.ssl.enabled=true
+      - xpack.security.transport.ssl.key=certs/es01/es01.key
+      - xpack.security.transport.ssl.certificate=certs/es01/es01.crt
+      - xpack.security.transport.ssl.certificate_authorities=certs/ca/ca.crt
+      - xpack.security.transport.ssl.verification_mode=certificate
+      - xpack.license.self_generated.type=${LICENSE}
+      - xpack.monitoring.collection.enabled=true
+    mem_limit: ${ES_MEM_LIMIT}
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "curl -s --cacert config/certs/ca/ca.crt https://localhost:9200 | grep -q 'missing authentication credentials'",
+        ]
+      interval: 10s
+      timeout: 10s
+      retries: 120
+
+  es02:
+    container_name: elasticsearch02
+    depends_on:
+      - es01
+    <<: *elasticsearchImage
+    networks:
+      masterNetwork:
+        ipv4_address: 172.20.0.7
+    volumes:
+      - certs:/usr/share/elasticsearch/config/certs
+      - esdata02:/usr/share/elasticsearch/data
+    environment:
+      - node.name=es02
+      - cluster.name=${CLUSTER_NAME}
+      - cluster.initial_master_nodes=es01,es02,es03
+      - discovery.seed_hosts=es01,es03
+      - ELASTIC_PASSWORD=${ELASTIC_PASSWORD}
+      - bootstrap.memory_lock=true
+      - xpack.security.enabled=true
+      - xpack.security.http.ssl.enabled=true
+      - xpack.security.http.ssl.key=certs/es02/es02.key
+      - xpack.security.http.ssl.certificate=certs/es02/es02.crt
+      - xpack.security.http.ssl.certificate_authorities=certs/ca/ca.crt
+      - xpack.security.transport.ssl.enabled=true
+      - xpack.security.transport.ssl.key=certs/es02/es02.key
+      - xpack.security.transport.ssl.certificate=certs/es02/es02.crt
+      - xpack.security.transport.ssl.certificate_authorities=certs/ca/ca.crt
+      - xpack.security.transport.ssl.verification_mode=certificate
+      - xpack.license.self_generated.type=${LICENSE}
+      - xpack.monitoring.collection.enabled=true
+    mem_limit: ${ES_MEM_LIMIT}
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "curl -s --cacert config/certs/ca/ca.crt https://localhost:9200 | grep -q 'missing authentication credentials'",
+        ]
+      interval: 10s
+      timeout: 10s
+      retries: 120
+
+  es03:
+    container_name: elasticsearch03
+    depends_on:
+      - es02
+    <<: *elasticsearchImage
+    networks:
+      masterNetwork:
+        ipv4_address: 172.20.0.8
+    volumes:
+      - certs:/usr/share/elasticsearch/config/certs
+      - esdata03:/usr/share/elasticsearch/data
+    environment:
+      - node.name=es03
+      - cluster.name=${CLUSTER_NAME}
+      - cluster.initial_master_nodes=es01,es02,es03
+      - discovery.seed_hosts=es01,es02
+      - ELASTIC_PASSWORD=${ELASTIC_PASSWORD}
+      - bootstrap.memory_lock=true
+      - xpack.security.enabled=true
+      - xpack.security.http.ssl.enabled=true
+      - xpack.security.http.ssl.key=certs/es03/es03.key
+      - xpack.security.http.ssl.certificate=certs/es03/es03.crt
+      - xpack.security.http.ssl.certificate_authorities=certs/ca/ca.crt
+      - xpack.security.transport.ssl.enabled=true
+      - xpack.security.transport.ssl.key=certs/es03/es03.key
+      - xpack.security.transport.ssl.certificate=certs/es03/es03.crt
+      - xpack.security.transport.ssl.certificate_authorities=certs/ca/ca.crt
+      - xpack.security.transport.ssl.verification_mode=certificate
+      - xpack.license.self_generated.type=${LICENSE}
+      - xpack.monitoring.collection.enabled=true
+    mem_limit: ${ES_MEM_LIMIT}
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "curl -s --cacert config/certs/ca/ca.crt https://localhost:9200 | grep -q 'missing authentication credentials'",
+        ]
+      interval: 10s
+      timeout: 10s
+      retries: 120
+
+  kibana:
+    container_name: kibana
+    depends_on:
+      es01:
+        condition: service_healthy
+      es02:
+        condition: service_healthy
+      es03:
+        condition: service_healthy
+    image: docker.elastic.co/kibana/kibana:${STACK_VERSION}
+    volumes:
+      - certs:/usr/share/kibana/config/certs
+      - kibanadata:/usr/share/kibana/data
+    ports:
+      - ${KIBANA_PORT}:5601
+    networks:
+      masterNetwork:
+        ipv4_address: 172.20.0.9
+    environment:
+      - SERVERNAME=kibana
+      - ELASTICSEARCH_HOSTS=https://es01:9200
+      - ELASTICSEARCH_USERNAME=kibana_system
+      - ELASTICSEARCH_PASSWORD=${KIBANA_PASSWORD}
+      - ELASTICSEARCH_SSL_CERTIFICATEAUTHORITIES=config/certs/ca/ca.crt
+      - XPACK_SECURITY_ENCRYPTIONKEY=${ENCRYPTION_KEY}
+      - XPACK_ENCRYPTEDSAVEDOBJECTS_ENCRYPTIONKEY=${ENCRYPTION_KEY}
+      - XPACK_REPORTING_ENCRYPTIONKEY=${ENCRYPTION_KEY}
+    mem_limit: ${KB_MEM_LIMIT}
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "curl -s -I http://localhost:5601 | grep -q 'HTTP/1.1 302 Found'",
+        ]
+      interval: 10s
+      timeout: 10s
+      retries: 120
+
+  logstash01:
+    container_name: logstash01
+    ports:
+      - 5000:5000
+    depends_on:
+      es01:
+        condition: service_healthy
+      es02:
+        condition: service_healthy
+      es03:
+        condition: service_healthy
+      kibana:
+        condition: service_healthy
+    image: docker.elastic.co/logstash/logstash:${STACK_VERSION}
+    labels:
+      co.elastic.logs/module: logstash
+    user: root
+    networks:
+      masterNetwork:
+        ipv4_address: 172.20.0.12
+    volumes:
+      - certs:/usr/share/logstash/certs
+      - logstashdata01:/usr/share/logstash/data
+      - "./ELK-monitoring/logstash_ingest_data/:/usr/share/logstash/ingest_data/"
+      - "./ELK-monitoring/logstashConfig/pipeline:/usr/share/logstash/pipeline:ro"
+    environment:
+      - xpack.monitoring.enabled=true
+      - xpack.monitoring.collection.enabled=true
+      - xpack.monitoring.elasticsearch.hosts=["https://es01:9200","https://es02:9200","https://es03:9200"]
+      - xpack.monitoring.elasticsearch.username="elastic"
+      - xpack.monitoring.elasticsearch.password=${ELASTIC_PASSWORD}
+      - xpack.monitoring.elasticsearch.ssl.certificate_authority=certs/ca/ca.crt
+      - ELASTIC_USER=elastic
+      - ELASTIC_PASSWORD=${ELASTIC_PASSWORD}
+
+  logstash02:
+    container_name: logstash02
+    ports:
+      - 5001:5000
+    depends_on:
+      es01:
+        condition: service_healthy
+      es02:
+        condition: service_healthy
+      es03:
+        condition: service_healthy
+      kibana:
+        condition: service_healthy
+    image: docker.elastic.co/logstash/logstash:${STACK_VERSION}
+    labels:
+      co.elastic.logs/module: logstash
+    user: root
+    networks:
+      masterNetwork:
+        ipv4_address: 172.20.0.13
+    volumes:
+      - certs:/usr/share/logstash/certs
+      - logstashdata02:/usr/share/logstash/data
+      - "./ELK-monitoring/logstash_ingest_data/:/usr/share/logstash/ingest_data/"
+      - "./ELK-monitoring/logstashConfig/pipeline:/usr/share/logstash/pipeline:ro"
+    environment:
+      - xpack.monitoring.enabled=true
+      - xpack.monitoring.collection.enabled=true
+      - xpack.monitoring.elasticsearch.hosts=["https://es01:9200","https://es02:9200","https://es03:9200"]
+      - xpack.monitoring.elasticsearch.username="elastic"
+      - xpack.monitoring.elasticsearch.password=${ELASTIC_PASSWORD}
+      - xpack.monitoring.elasticsearch.ssl.certificate_authority=certs/ca/ca.crt
+      - ELASTIC_USER=elastic
+      - ELASTIC_PASSWORD=${ELASTIC_PASSWORD}
+
+  logstash03:
+    container_name: logstash03
+    ports:
+      - 5002:5000
+    depends_on:
+      es01:
+        condition: service_healthy
+      es02:
+        condition: service_healthy
+      es03:
+        condition: service_healthy
+      kibana:
+        condition: service_healthy
+    image: docker.elastic.co/logstash/logstash:${STACK_VERSION}
+    labels:
+      co.elastic.logs/module: logstash
+    user: root
+    networks:
+      masterNetwork:
+        ipv4_address: 172.20.0.14
+    volumes:
+      - certs:/usr/share/logstash/certs
+      - logstashdata03:/usr/share/logstash/data
+      - "./ELK-monitoring/logstash_ingest_data/:/usr/share/logstash/ingest_data/"
+      - "./ELK-monitoring/logstashConfig/pipeline:/usr/share/logstash/pipeline:ro"
+    environment:
+      - xpack.monitoring.enabled=true
+      - xpack.monitoring.collection.enabled=true
+      - xpack.monitoring.elasticsearch.hosts=["https://es01:9200","https://es02:9200","https://es03:9200"]
+      - xpack.monitoring.elasticsearch.username="elastic"
+      - xpack.monitoring.elasticsearch.password=${ELASTIC_PASSWORD}
+      - xpack.monitoring.elasticsearch.ssl.certificate_authority=certs/ca/ca.crt
+      - ELASTIC_USER=elastic
+      - ELASTIC_PASSWORD=${ELASTIC_PASSWORD}
+
+  metricbeat01:
+    container_name: metricbeat01
+    depends_on:
+      es01:
+        condition: service_healthy
+      es02:
+        condition: service_healthy
+      es03:
+        condition: service_healthy
+      kibana:
+        condition: service_healthy
+    image: docker.elastic.co/beats/metricbeat:${STACK_VERSION}
+    user: root
+    networks:
+      masterNetwork:
+        ipv4_address: 172.20.0.10
+    volumes:
+      - certs:/usr/share/metricbeat/certs
+      - metricbeatdata01:/usr/share/metricbeat/data
+      - "./ELK-monitoring/metricbeat.yml:/usr/share/metricbeat/metricbeat.yml:ro"
+      - "/var/run/docker.sock:/var/run/docker.sock:ro"
+      - "/sys/fs/cgroup:/hostfs/sys/fs/cgroup:ro"
+      - "/proc:/hostfs/proc:ro"
+      - "/:/hostfs:ro"
+    environment:
+      - ELASTIC_USER=elastic
+      - ELASTIC_PASSWORD=${ELASTIC_PASSWORD}
+      - ELASTIC_HOSTS=https://es01:9200
+      - KIBANA_HOSTS=http://kibana:5601
+      - LOGSTASH_HOSTS=http://logstash01:9600
+
   eureka-server-peer-1:
     build: Service-registry
+    depends_on:
+      - metricbeat01
     image: my-eureka-builder-image
     container_name: eureka-server-peer-1
     ports:
@@ -11,7 +428,7 @@ services:
       - SPRING_PROFILES_ACTIVE=peer-1
       - PEER_2_URL=http://172.20.0.3:9002/eureka/
       - PEER_3_URL=http://172.20.0.4:9003/eureka/
-      - LOGSTASH_DESTINATION_ONE=172.20.0.13:5000
+      - LOGSTASH_DESTINATION_ONE=172.20.0.12:5000
       - LOGSTASH_DESTINATION_TWO=172.20.0.13:5000
       - LOGSTASH_DESTINATION_THREE=172.20.0.14:5000
     networks:
@@ -21,6 +438,8 @@ services:
   eureka-server-peer-2:
     build: Service-registry
     image: my-eureka-builder-image
+    depends_on:
+      - metricbeat01
     container_name: eureka-server-peer-2
     ports:
       - "9002:9002"
@@ -28,7 +447,7 @@ services:
       - SPRING_PROFILES_ACTIVE=peer-2
       - PEER_1_URL=http://172.20.0.2:9001/eureka/
       - PEER_3_URL=http://172.20.0.4:9003/eureka/
-      - LOGSTASH_DESTINATION_ONE=172.20.0.13:5000
+      - LOGSTASH_DESTINATION_ONE=172.20.0.12:5000
       - LOGSTASH_DESTINATION_TWO=172.20.0.13:5000
       - LOGSTASH_DESTINATION_THREE=172.20.0.14:5000
     networks:
@@ -38,6 +457,8 @@ services:
   eureka-server-peer-3:
     build: Service-registry
     image: my-eureka-builder-image
+    depends_on:
+      - metricbeat01
     container_name: eureka-server-peer-3
     ports:
       - "9003:9003"
@@ -45,14 +466,9 @@ services:
       - SPRING_PROFILES_ACTIVE=peer-3
       - PEER_1_URL=http://172.20.0.2:9001/eureka/
       - PEER_2_URL=http://172.20.0.3:9002/eureka/
-      - LOGSTASH_DESTINATION_ONE=172.20.0.13:5000
+      - LOGSTASH_DESTINATION_ONE=172.20.0.12:5000
       - LOGSTASH_DESTINATION_TWO=172.20.0.13:5000
       - LOGSTASH_DESTINATION_THREE=172.20.0.14:5000
     networks:
       masterNetwork:
         ipv4_address: 172.20.0.4
-
-networks:
-  masterNetwork:
-    name: masterNetwork
-    external: true
