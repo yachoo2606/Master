@@ -1,8 +1,14 @@
 #docker compose down && docker compose build --no-cache && docker compose up --force-recreate -d
 version: '3.8'
 
-x-common-settings: &elasticsearchImage
+x-common-elastisearch-image: &elasticsearchImage
   image: docker.elastic.co/elasticsearch/elasticsearch:${STACK_VERSION}
+x-common-logstash-image: &logstashImage
+  image: docker.elastic.co/logstash/logstash:${STACK_VERSION}
+x-common-my-eureka-image: &myEureka
+  build: Service-registry
+  image: my-eureka-builder-image
+
 
 volumes:
   certs:
@@ -281,6 +287,7 @@ services:
       retries: 120
 
   logstash01:
+    <<: *logstashImage
     container_name: logstash01
     ports:
       - 5000:5000
@@ -293,7 +300,6 @@ services:
         condition: service_healthy
       kibana:
         condition: service_healthy
-    image: docker.elastic.co/logstash/logstash:${STACK_VERSION}
     labels:
       co.elastic.logs/module: logstash
     user: root
@@ -324,6 +330,7 @@ services:
       retries: 120
 
   logstash02:
+    <<: *logstashImage
     container_name: logstash02
     ports:
       - 5001:5000
@@ -336,7 +343,6 @@ services:
         condition: service_healthy
       kibana:
         condition: service_healthy
-    image: docker.elastic.co/logstash/logstash:${STACK_VERSION}
     labels:
       co.elastic.logs/module: logstash
     user: root
@@ -367,6 +373,7 @@ services:
       retries: 120
 
   logstash03:
+    <<: *logstashImage
     container_name: logstash03
     ports:
       - 5002:5000
@@ -379,7 +386,6 @@ services:
         condition: service_healthy
       kibana:
         condition: service_healthy
-    image: docker.elastic.co/logstash/logstash:${STACK_VERSION}
     labels:
       co.elastic.logs/module: logstash
     user: root
@@ -441,7 +447,7 @@ services:
       - LOGSTASH_HOSTS=http://logstash01:9600
 
   eureka-server-peer-1:
-    build: Service-registry
+    <<: *myEureka
     depends_on:
       logstash01:
         condition: service_healthy
@@ -449,7 +455,6 @@ services:
         condition: service_healthy
       logstash03:
         condition: service_healthy
-    image: my-eureka-builder-image
     container_name: eureka-server-peer-1
     ports:
       - "9001:9001"
@@ -465,8 +470,7 @@ services:
         ipv4_address: 172.20.0.2
 
   eureka-server-peer-2:
-    build: Service-registry
-    image: my-eureka-builder-image
+    <<: *myEureka
     depends_on:
       logstash01:
         condition: service_healthy
@@ -489,8 +493,7 @@ services:
         ipv4_address: 172.20.0.3
 
   eureka-server-peer-3:
-    build: Service-registry
-    image: my-eureka-builder-image
+    <<: *myEureka
     depends_on:
       logstash01:
         condition: service_healthy
