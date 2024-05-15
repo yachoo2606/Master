@@ -33,7 +33,8 @@ for (( i=first_producer_id; i<first_producer_id+num_producers; i++ )); do
     -e LOGSTASH_DESTINATION_ONE=172.20.0.12:5000 \
     -e LOGSTASH_DESTINATION_TWO=172.20.0.13:5000 \
     -e LOGSTASH_DESTINATION_THREE=172.20.0.14:5000 \
-    -p $((10000+$i)):9000 \
+    -e PORT=10000\
+    -p $((10000+$i)):10000 \
     --name=PRODUCER_$i producer:latest
 
 done

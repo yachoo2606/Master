@@ -1,4 +1,4 @@
-#docker compose down && docker compose build --no-cache && docker compose up --force-recreate -d
+#sudo docker compose --env-file ELK-monitoring/.env down -v && sudo docker compose --env-file ELK-monitoring/.env build --no-cache && sudo docker compose --env-file ELK-monitoring/.env up --force-recreate -d
 version: '3.8'
 
 x-common-elastisearch-image: &elasticsearchImage
