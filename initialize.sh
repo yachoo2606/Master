@@ -23,13 +23,6 @@ sudo apt-get update
 
 sudo apt-get install docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
 
-
-# Clone the main repository first
-git clone https://github.com/yachoo2606/Master.git
-
-# Change to the Master directory
-cd Master
-
 # Clone the other repositories inside the Master directory
 git clone https://github.com/yachoo2606/Master_producer.git Producer
 git clone https://github.com/yachoo2606/Master-protokol-Worker.git
