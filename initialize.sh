@@ -26,7 +26,7 @@ sudo apt-get install docker-ce docker-ce-cli containerd.io docker-buildx-plugin 
 # Clone the other repositories inside the Master directory
 git clone https://github.com/yachoo2606/Master_producer.git Producer
 git clone https://github.com/yachoo2606/Master-protokol-Worker.git Master-protokol-Worker
-git clone https://github.com/yachoo2606/Master-Service-Registry.git Service-Registry
+git clone https://github.com/yachoo2606/Master-Service-Registry.git Service-registry
 git clone https://github.com/yachoo2606/Master-ELK-monitoring.git ELK-monitoring
 
 echo "All repositories cloned and organized successfully!"
