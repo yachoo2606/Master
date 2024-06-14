@@ -2,3 +2,7 @@ ELK-Monitoring
 Producer
 Service-Registry
 Master-Protocol-Worker
+
+.idea
+tests/.idea
+tests/.venv
