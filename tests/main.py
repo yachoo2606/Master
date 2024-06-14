@@ -1,8 +1,9 @@
 import json
 import time
 import random
+import requests
 import asyncio
-import aiohttp
+import concurrent.futures
 import plotly.graph_objects as go
 from matplotlib import pyplot as plt
 from tqdm import tqdm
@@ -17,56 +18,55 @@ def loadJSON(file_path):
         return json.load(f)
 
 
-async def sendRequest(session, i, url, json_data):
+def sendRequest(i, url, json_data):
     sampled_data = random.sample(json_data, random.randint(1, 10))
     for element in sampled_data:
         element['amount'] = random.randint(1, 16)
 
     # Measure the time taken for the request
     start_time = time.time()
-    async with session.post(f"http://{url}/proposal", json=sampled_data) as response:
+    response = requests.post(f"http://{url}/proposal", json=sampled_data)
+    end_time = time.time()
+
+    # Calculate and save the time taken
+    request_time = end_time - start_time
+    request_times.append(request_time)
+
+    # Save the request and response
+    request_responses.append({
+        "request_number": i + 1,
+        "sampled_data": sampled_data,
+        "sampled_count": len(sampled_data),
+        "response_status": response.status_code,
+        "response_data": response.text,
+        "request_time": request_time
+    })
+
+    print(f"Request {i + 1} response status: {response.status_code}, time taken: {request_time:.4f} seconds")
+    return response
+
+
+async def sendRequestAsync(executor, i, url, json_data, semaphore):
+    async with semaphore:
+        loop = asyncio.get_event_loop()
+        start_time = time.time()
+        response = await loop.run_in_executor(executor, sendRequest, i, url, json_data)
         end_time = time.time()
-
-        # Calculate and save the time taken
-        request_time = end_time - start_time
-        request_times.append(request_time)
-
-        # Save the request and response
-        response_data = await response.text()
-        request_responses.append({
-            "request_number": i + 1,
-            "sampled_data": sampled_data,
-            "sampled_count": len(sampled_data),
-            "response_status": response.status,
-            "response_data": response_data,
-            "request_time": request_time
-        })
-
-        print(f"Request {i + 1} response status: {response.status}, time taken: {request_time:.4f} seconds")
+        print(f"Request {i + 1} async overhead time: {end_time - start_time:.4f} seconds")
+        return response
 
 
 async def main(workers_url, countOfRequests):
     json_data = loadJSON("products.json")
+    semaphore = asyncio.Semaphore(countOfRequests)  # Limit to 10 concurrent requests
+    executor = concurrent.futures.ThreadPoolExecutor(max_workers=countOfRequests)
 
-    async with aiohttp.ClientSession() as session:
-        tasks = []
-        for i in tqdm(range(countOfRequests)):
-            url = random.choice(workers_url)
-            task = asyncio.create_task(sendRequest(session, i, url, json_data))
-            tasks.append(task)
-        await asyncio.gather(*tasks)
-
-    # Print the global array of request times
-    print("Request times:", request_times)
-
-    # Print requests and their responses
-    for request_response in request_responses:
-        print(f"Request {request_response['request_number']}:")
-        print(f"  Sampled data count: {request_response['sampled_count']}")
-        print(f"  Sampled data: {request_response['sampled_data']}")
-        print(f"  Response status: {request_response['response_status']}")
-        print(f"  Response data: {request_response['response_data']}")
-        print(f"  Time taken: {request_response['request_time']:.4f} seconds\n")
+    tasks = []
+    for i in tqdm(range(countOfRequests)):
+        url = random.choice(workers_url)
+        task = sendRequestAsync(executor, i, url, json_data, semaphore)
+        tasks.append(task)
+    await asyncio.gather(*tasks)
 
     plot_request_times()
     plot_request_times_plt()
@@ -106,4 +106,4 @@ def plot_request_times():
 
 
 if __name__ == '__main__':
-    asyncio.run(main(["localhost:12001", "localhost:12002"], 1000))
+    asyncio.run(main(["localhost:12001", "localhost:12002"], 100))
