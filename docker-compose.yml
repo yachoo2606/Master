@@ -9,7 +9,6 @@ x-common-my-eureka-image: &myEureka
   build: Service-registry
   image: my-eureka-builder-image
 
-
 volumes:
   certs:
     driver: local
@@ -143,7 +142,12 @@ services:
       - xpack.security.transport.ssl.verification_mode=certificate
       - xpack.license.self_generated.type=${LICENSE}
       - xpack.monitoring.collection.enabled=true
-    mem_limit: ${ES_MEM_LIMIT}
+    mem_limit: 1g
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 1g
     ulimits:
       memlock:
         soft: -1
@@ -188,7 +192,12 @@ services:
       - xpack.security.transport.ssl.verification_mode=certificate
       - xpack.license.self_generated.type=${LICENSE}
       - xpack.monitoring.collection.enabled=true
-    mem_limit: ${ES_MEM_LIMIT}
+    mem_limit: 1g
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 1g
     ulimits:
       memlock:
         soft: -1
@@ -233,7 +242,12 @@ services:
       - xpack.security.transport.ssl.verification_mode=certificate
       - xpack.license.self_generated.type=${LICENSE}
       - xpack.monitoring.collection.enabled=true
-    mem_limit: ${ES_MEM_LIMIT}
+    mem_limit: 1g
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 1g
     ulimits:
       memlock:
         soft: -1
@@ -275,7 +289,12 @@ services:
       - XPACK_SECURITY_ENCRYPTIONKEY=${ENCRYPTION_KEY}
       - XPACK_ENCRYPTEDSAVEDOBJECTS_ENCRYPTIONKEY=${ENCRYPTION_KEY}
       - XPACK_REPORTING_ENCRYPTIONKEY=${ENCRYPTION_KEY}
-    mem_limit: ${KB_MEM_LIMIT}
+    mem_limit: 1g
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 1g
     healthcheck:
       test:
         [
@@ -320,6 +339,12 @@ services:
       - xpack.monitoring.elasticsearch.ssl.certificate_authority=certs/ca/ca.crt
       - ELASTIC_USER=elastic
       - ELASTIC_PASSWORD=${ELASTIC_PASSWORD}
+    mem_limit: 512m
+    deploy:
+      resources:
+        limits:
+          cpus: '0.25'
+          memory: 512m
     healthcheck:
       test: [
         "CMD-SHELL",
@@ -363,6 +388,12 @@ services:
       - xpack.monitoring.elasticsearch.ssl.certificate_authority=certs/ca/ca.crt
       - ELASTIC_USER=elastic
       - ELASTIC_PASSWORD=${ELASTIC_PASSWORD}
+    mem_limit: 512m
+    deploy:
+      resources:
+        limits:
+          cpus: '0.25'
+          memory: 512m
     healthcheck:
       test: [
         "CMD-SHELL",
@@ -406,6 +437,12 @@ services:
       - xpack.monitoring.elasticsearch.ssl.certificate_authority=certs/ca/ca.crt
       - ELASTIC_USER=elastic
       - ELASTIC_PASSWORD=${ELASTIC_PASSWORD}
+    mem_limit: 512m
+    deploy:
+      resources:
+        limits:
+          cpus: '0.25'
+          memory: 512m
     healthcheck:
       test: [
         "CMD-SHELL",
@@ -445,6 +482,12 @@ services:
       - ELASTIC_HOSTS=["https://es01:9200","https://es02:9200","https://es03:9200"]
       - KIBANA_HOSTS=http://kibana:5601
       - LOGSTASH_HOSTS=["http://logstash01:9600","http://logstash02:9600","http://logstash03:9600"]
+    mem_limit: 512m
+    deploy:
+      resources:
+        limits:
+          cpus: '0.25'
+          memory: 512m
 
   eureka-server-peer-1:
     <<: *myEureka
@@ -468,6 +511,12 @@ services:
     networks:
       masterNetwork:
         ipv4_address: 172.20.0.2
+    mem_limit: 1g
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 1g
 
   eureka-server-peer-2:
     <<: *myEureka
@@ -491,6 +540,12 @@ services:
     networks:
       masterNetwork:
         ipv4_address: 172.20.0.3
+    mem_limit: 1g
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 1g
 
   eureka-server-peer-3:
     <<: *myEureka
@@ -514,3 +569,9 @@ services:
     networks:
       masterNetwork:
         ipv4_address: 172.20.0.4
+    mem_limit: 1g
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 1g
